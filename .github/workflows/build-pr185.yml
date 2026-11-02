@@ -11,6 +11,10 @@ on:
         description: 'gradle task'
         required: false
         default: ':app:assembleDebug'
+      extra:
+        description: 'extra gradle args'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -38,17 +42,23 @@ jobs:
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           [ -x "$SDKMANAGER" ] || SDKMANAGER="$(ls -d $ANDROID_HOME/cmdline-tools/*/bin/sdkmanager | head -1)"
-          echo "using $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || true
           ls "$ANDROID_HOME/platforms"
 
       - name: gradle build
         working-directory: src
+        shell: bash
         run: |
+          set -o pipefail
           chmod +x gradlew
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          ./gradlew "${{ inputs.task }}" --no-daemon --stacktrace 2>&1 | tail -n 400
+          ./gradlew "${{ inputs.task }}" ${{ inputs.extra }} --no-daemon --stacktrace 2>&1 | tail -n 400
+
+      - name: locate apk
+        if: always()
+        run: |
+          ls -l src/app/build/outputs/apk/*/* 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -56,5 +66,5 @@ jobs:
           name: apk-${{ github.run_id }}
           path: |
             src/app/build/outputs/apk/**/*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
