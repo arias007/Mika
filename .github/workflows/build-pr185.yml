@@ -1,0 +1,55 @@
+name: build-pr185
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'git ref to build'
+        required: false
+        default: 'refs/pull/185/head'
+      task:
+        description: 'gradle task'
+        required: false
+        default: ':app:assembleDebug'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: checkout upstream PR
+        run: |
+          git init src
+          cd src
+          git remote add origin https://github.com/wangzan101/Mika.git
+          git fetch --depth=1 origin "${{ inputs.ref }}"
+          git checkout FETCH_HEAD
+          git log -1 --format='%H %s'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: install sdk
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: gradle build
+        working-directory: src
+        run: |
+          chmod +x gradlew
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          ./gradlew "${{ inputs.task }}" --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apk-${{ github.run_id }}
+          path: |
+            src/app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
+          retention-days: 14
